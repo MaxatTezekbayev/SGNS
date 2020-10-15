@@ -1,11 +1,12 @@
 import argparse
 import time
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import gensim
 from gensim.models import KeyedVectors
 from gensim.test.utils import datapath
 import os
-
+import copy
 import data
 import model
 
@@ -39,6 +40,10 @@ parser.add_argument('--epsilon', type=float, default=0.01,
                     help='epsilon to be used in the LogitSGNS model')
 parser.add_argument('--gpu', default='0',
                     help='GPU to use')
+parser.add_argument('--save_initial', type=bool,default=False,
+                    help='save initial weights or not')
+parser.add_argument('--run_name', type=str, default='sgns',
+                    help='path to save the tensorboard runs')  
 
 args = parser.parse_args()
 
@@ -65,13 +70,24 @@ else:
   print("No such model:", args.model)
   exit(1)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+if args.save_initial:
+  torch.save(skip_gram_model.state_dict(), f"initial_state_dict_sgns.pth")
+
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 if use_cuda: skip_gram_model.cuda()
 
 epoch_size = dataset.data_len // args.batch_size
 optimizer = torch.optim.Adam(skip_gram_model.parameters())
+
+
+
+writer = SummaryWriter('runs/' + args.run_name)
+
+
+
 
 for epoch in range(args.epochs):
   last_time = time.time()
@@ -103,6 +119,7 @@ for epoch in range(args.epochs):
 
   print("Epoch: " + str(epoch + 1), end=", ")
   print("Loss = %.3f" % (total_loss / epoch_size), end=", ")
+  writer.add_scalar('Loss/train', (total_loss / epoch_size), epoch)
 
   # Compute validation loss
   if args.valid != None:
@@ -120,10 +137,14 @@ for epoch in range(args.epochs):
       valid_total_loss += valid_loss.item()
 
     print("Valid Loss = %.3f" % (valid_total_loss / valid_epoch_size), end=', ')
-    
-  skip_gram_model.save_embedding(my_data.id2word, os.path.join(args.save_dir, args.save_file))
-  wv_from_text = KeyedVectors.load_word2vec_format(os.path.join(args.save_dir, args.save_file), binary=False)
-  ws353 = wv_from_text.evaluate_word_pairs(datapath('wordsim353.tsv'))
-  google = wv_from_text.evaluate_word_analogies(datapath('questions-words.txt'))
-  print('WS353 = %.3f' % ws353[0][0], end=', ')
-  print('Google = %.3f' % google[0])
+    writer.add_scalar('Loss/val', (valid_total_loss / valid_epoch_size), epoch)
+
+torch.save(skip_gram_model.state_dict(), f"final_state_dict_sgns.pth")
+skip_gram_model.save_embedding(my_data.id2word, os.path.join(args.save_dir, args.save_file))
+wv_from_text = KeyedVectors.load_word2vec_format(os.path.join(args.save_dir, args.save_file), binary=False)
+ws353 = wv_from_text.evaluate_word_pairs(datapath('wordsim353.tsv'))
+google = wv_from_text.evaluate_word_analogies(datapath('questions-words.txt'))
+print('WS353 = %.3f' % ws353[0][0], end=', ')
+print('Google = %.3f' % google[0])
+writer.add_scalar('WS353', ws353[0][0], epoch)
+writer.add_scalar('Google', google[0], epoch)
