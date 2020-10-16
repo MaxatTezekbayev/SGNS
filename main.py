@@ -81,13 +81,13 @@ mask = None
 if args.pruned:
   init_checkpoint = torch.load('initial_state_dict_sgns.pth')
   final_checkpoint = torch.load('final_state_dict_sgns.pth')
-  skip_gram_model.load_state_dict(final)
+  skip_gram_model.load_state_dict(final_checkpoint)
   prune.l1_unstructured(skip_gram_model.v_embeddings, name='weight', amount=args.prune_amount)
   mask = skip_gram_model.v_embeddings.weight_mask
   mask=mask.bool()
   prune.remove(skip_gram_model.v_embeddings, 'weight')
 
-  skip_gram_model.load_state_dict(init)
+  skip_gram_model.load_state_dict(init_checkpoint)
 
 
 
