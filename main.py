@@ -1,6 +1,7 @@
 import argparse
 import time
 import torch
+import torch.nn.utils.prune as prune
 from torch.utils.tensorboard import SummaryWriter
 import gensim
 from gensim.models import KeyedVectors
@@ -42,9 +43,12 @@ parser.add_argument('--gpu', default='0',
                     help='GPU to use')
 parser.add_argument('--save_initial', type=bool,default=False,
                     help='save initial weights or not')
-parser.add_argument('--run_name', type=str, default='sgns',
-                    help='path to save the tensorboard runs')  
 
+parser.add_argument('--pruned', type=bool,default=False,
+                    help='train pruned model')  
+
+parser.add_argument('--prune_amount', type=float, default=0.00,
+                    help='percent of pruned weights')
 args = parser.parse_args()
 
 
@@ -73,6 +77,19 @@ else:
 if args.save_initial:
   torch.save(skip_gram_model.state_dict(), f"initial_state_dict_sgns.pth")
 
+mask = None
+if args.pruned:
+  init_checkpoint = torch.load('initial_state_dict_sgns.pth')
+  final_checkpoint = torch.load('final_state_dict_sgns.pth')
+  skip_gram_model.load_state_dict(final)
+  prune.l1_unstructured(skip_gram_model.v_embeddings, name='weight', amount=args.prune_amount)
+  mask = skip_gram_model.v_embeddings.weight_mask
+  mask=mask.bool()
+  prune.remove(skip_gram_model.v_embeddings, 'weight')
+
+  skip_gram_model.load_state_dict(init)
+
+
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 use_cuda = torch.cuda.is_available()
@@ -84,7 +101,7 @@ optimizer = torch.optim.Adam(skip_gram_model.parameters())
 
 
 
-writer = SummaryWriter('runs/' + args.run_name)
+writer = SummaryWriter('runs/' + args.save_file)
 
 
 
@@ -103,6 +120,12 @@ for epoch in range(args.epochs):
     optimizer.zero_grad()
     loss = skip_gram_model.forward(pos_u, pos_v, neg_v)
     loss.backward()
+
+    if args.pruned:
+      skip_gram_model.v_embeddings.grad.data[~mask]=0
+
+
+
     optimizer.step()
 
     total_loss += loss.item()
@@ -139,7 +162,7 @@ for epoch in range(args.epochs):
     print("Valid Loss = %.3f" % (valid_total_loss / valid_epoch_size), end=', ')
     writer.add_scalar('Loss/val', (valid_total_loss / valid_epoch_size), epoch)
 
-torch.save(skip_gram_model.state_dict(), f"final_state_dict_sgns.pth")
+torch.save(skip_gram_model.state_dict(), os.path.join(args.save_dir, args.save_file+".pth"))
 skip_gram_model.save_embedding(my_data.id2word, os.path.join(args.save_dir, args.save_file))
 wv_from_text = KeyedVectors.load_word2vec_format(os.path.join(args.save_dir, args.save_file), binary=False)
 ws353 = wv_from_text.evaluate_word_pairs(datapath('wordsim353.tsv'))
