@@ -122,7 +122,7 @@ for epoch in range(args.epochs):
     loss.backward()
 
     if args.pruned:
-      skip_gram_model.v_embeddings.grad.data[~mask]=0
+      skip_gram_model.v_embeddings.weight.grad.data[~mask]=0
 
 
 
