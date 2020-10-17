@@ -49,6 +49,13 @@ parser.add_argument('--pruned', type=bool,default=False,
 
 parser.add_argument('--prune_amount', type=float, default=0.00,
                     help='percent of pruned weights')
+
+parser.add_argument('--exp2', type=bool,default=False,
+                    help='exp2 train only v_embeddings')  
+
+parser.add_argument('--exp2_file',  type=str, default=None,
+                    help='exp2 checkpoint')  
+
 args = parser.parse_args()
 
 
@@ -89,6 +96,10 @@ if args.pruned:
 
   skip_gram_model.load_state_dict(init_checkpoint)
 
+if args.exp2:
+  checkpoint = torch.load(args.exp2_file)
+  skip_gram_model.load_state_dict(checkpoint)
+  skip_gram_model.u_embeddings.weight.requires_grad = False
 
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
@@ -98,6 +109,9 @@ if use_cuda: skip_gram_model.cuda()
 
 epoch_size = dataset.data_len // args.batch_size
 optimizer = torch.optim.Adam(skip_gram_model.parameters())
+
+if args.exp2:
+  optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, skip_gram_model.parameters()))
 
 
 
