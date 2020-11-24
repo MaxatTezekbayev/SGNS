@@ -81,12 +81,10 @@ else:
   print("No such model:", args.model)
   exit(1)
 
-if args.save_initial:
-  torch.save(skip_gram_model.state_dict(), f"initial_state_dict_sgns.pth")
 
 mask = None
 if args.pruned:
-  init_checkpoint = torch.load('initial_state_dict_sgns.pth')
+  init_checkpoint = torch.load('epoch1_state_dict_sgns.pth')
   final_checkpoint = torch.load('final_state_dict_sgns.pth')
   skip_gram_model.load_state_dict(final_checkpoint)
   prune.l1_unstructured(skip_gram_model.v_embeddings, name='weight', amount=args.prune_amount)
@@ -153,6 +151,10 @@ for epoch in range(args.epochs):
       print('wps = ' + str(int(wps)))
       last_time = now_time
       last_words = now_words
+  
+  if args.save_initial:
+    if epoch==0:
+      torch.save(skip_gram_model.state_dict(), f"epoch1_state_dict_sgns.pth")
 
   print("Epoch: " + str(epoch + 1), end=", ")
   print("Loss = %.3f" % (total_loss / epoch_size), end=", ")
